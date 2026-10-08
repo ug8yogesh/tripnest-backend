@@ -1,16 +1,20 @@
 package com.tripnest.backend.entity;
+
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
-@Table(name = "users")
+@Table(name = "travel_groups")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
-public class User {
+public class Group {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -19,19 +23,21 @@ public class User {
     @Column(nullable = false)
     private String name;
 
-    @Column(nullable = false, unique = true)
-    private String email;
-
-    @Column(nullable = false)
-    private String password;
+    private String description;
 
     @ManyToOne(fetch = FetchType.EAGER)
-    @JoinColumn(name = "role_id")
-    private Role role;
+    @JoinColumn(name = "created_by", nullable = false)
+    private User createdBy;
 
-    @Column(name = "is_active")
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "trip_id")
+    private Trip trip;
+
     @Builder.Default
-    private Boolean isActive = true;   
+    @OneToMany(mappedBy = "group",
+               cascade = CascadeType.ALL,
+               fetch = FetchType.EAGER)
+    private List<GroupMember> members = new ArrayList<>();
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

@@ -2,6 +2,7 @@ package com.tripnest.backend.service;
 
 import com.tripnest.backend.dto.TripRequest;
 import com.tripnest.backend.dto.TripResponse;
+import com.tripnest.backend.entity.Notification;
 import com.tripnest.backend.entity.Trip;
 import com.tripnest.backend.entity.User;
 import com.tripnest.backend.repository.TripRepository;
@@ -19,18 +20,21 @@ public class TripService {
 
     private final TripRepository tripRepository;
     private final UserRepository userRepository;
+    private final NotificationService notificationService;
 
-    // Current logged in user nikalo
+    // Current logged in user
     private User getCurrentUser() {
         String email = SecurityContextHolder.getContext()
                 .getAuthentication().getName();
+
         return userRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("User not found"));
     }
 
-    // Trip banao
+    // Create trip
     public TripResponse createTrip(TripRequest request) {
         User user = getCurrentUser();
+
         if (request.getEndDate().isBefore(request.getStartDate())) {
             throw new RuntimeException("End date cannot be before start date");
         }
@@ -44,30 +48,45 @@ public class TripService {
                 .travelers(request.getTravelers())
                 .description(request.getDescription())
                 .coverImage(request.getCoverImage())
-                .status(request.getStatus() != null ?
-                        request.getStatus() : Trip.TripStatus.PLANNING)
+                .status(request.getStatus() != null
+                        ? request.getStatus()
+                        : Trip.TripStatus.PLANNING)
                 .user(user)
                 .build();
 
-        return TripResponse.fromEntity(tripRepository.save(trip));
+        Trip saved = tripRepository.save(trip);
+
+        // Notification
+        notificationService.createNotification(
+                user,
+                "New trip created: \""
+                        + saved.getTitle()
+                        + "\" → " + saved.getDestination(),
+                Notification.NotificationType.TRIP_REMINDER,
+                saved.getId(),
+                Notification.ReferenceType.TRIP
+        );
+
+        return TripResponse.fromEntity(saved);
     }
 
-    // Apni saari trips dekho
+    // Get all trips of current user
     public List<TripResponse> getMyTrips() {
         User user = getCurrentUser();
+
         return tripRepository.findByUserId(user.getId())
                 .stream()
                 .map(TripResponse::fromEntity)
                 .collect(Collectors.toList());
     }
 
-    // Ek trip ki detail
+    // Get trip by ID
     public TripResponse getTripById(Long id) {
         Trip trip = tripRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Trip not found"));
 
-        // Sirf apni trip dekh sako
         User user = getCurrentUser();
+
         if (!trip.getUser().getId().equals(user.getId())) {
             throw new RuntimeException("Access denied");
         }
@@ -75,15 +94,17 @@ public class TripService {
         return TripResponse.fromEntity(trip);
     }
 
-    // Trip update karo
+    // Update trip
     public TripResponse updateTrip(Long id, TripRequest request) {
         Trip trip = tripRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Trip not found"));
 
         User user = getCurrentUser();
+
         if (!trip.getUser().getId().equals(user.getId())) {
             throw new RuntimeException("Access denied");
         }
+
         if (request.getEndDate().isBefore(request.getStartDate())) {
             throw new RuntimeException("End date cannot be before start date");
         }
@@ -96,19 +117,32 @@ public class TripService {
         trip.setTravelers(request.getTravelers());
         trip.setDescription(request.getDescription());
         trip.setCoverImage(request.getCoverImage());
+
         if (request.getStatus() != null) {
             trip.setStatus(request.getStatus());
         }
 
-        return TripResponse.fromEntity(tripRepository.save(trip));
+        Trip saved = tripRepository.save(trip);
+
+        // Notification
+        notificationService.createNotification(
+                user,
+                "Trip updated: \"" + saved.getTitle() + "\"",
+                Notification.NotificationType.TRAVEL_UPDATE,
+                saved.getId(),
+                Notification.ReferenceType.TRIP
+        );
+
+        return TripResponse.fromEntity(saved);
     }
 
-    // Trip delete karo
+    // Delete trip
     public void deleteTrip(Long id) {
         Trip trip = tripRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Trip not found"));
 
         User user = getCurrentUser();
+
         if (!trip.getUser().getId().equals(user.getId())) {
             throw new RuntimeException("Access denied");
         }
@@ -116,17 +150,32 @@ public class TripService {
         tripRepository.delete(trip);
     }
 
-    // Status update karo
+    // Update trip status
     public TripResponse updateTripStatus(Long id, Trip.TripStatus status) {
         Trip trip = tripRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Trip not found"));
 
         User user = getCurrentUser();
+
         if (!trip.getUser().getId().equals(user.getId())) {
             throw new RuntimeException("Access denied");
         }
 
         trip.setStatus(status);
-        return TripResponse.fromEntity(tripRepository.save(trip));
+
+        Trip saved = tripRepository.save(trip);
+
+        // Notification
+        notificationService.createNotification(
+                user,
+                "Trip \"" + saved.getTitle()
+                        + "\" status changed to "
+                        + status.name(),
+                Notification.NotificationType.TRAVEL_UPDATE,
+                saved.getId(),
+                Notification.ReferenceType.TRIP
+        );
+
+        return TripResponse.fromEntity(saved);
     }
 }
